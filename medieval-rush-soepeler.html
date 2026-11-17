@@ -1,0 +1,1897 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Medieval Rush – 3D Endless Runner</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      overflow: hidden;
+      background: #87b8e0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #f5e6c8;
+      touch-action: none;
+      user-select: none;
+    }
+    #game-canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    #ui {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px;
+    }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .stat {
+      background: rgba(30, 20, 10, 0.75);
+      border: 2px solid #8b6914;
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .stat span { color: #ffd700; }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 6, 2, 0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      text-align: center;
+      padding: 20px;
+    }
+    #overlay.hidden { display: none; }
+    h1 {
+      font-size: clamp(2rem, 8vw, 3.5rem);
+      color: #ffd700;
+      text-shadow: 0 0 20px #8b6914, 0 4px 8px #000;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      font-size: 1.1rem;
+      color: #c9a86c;
+      margin-bottom: 24px;
+      max-width: 420px;
+    }
+    .btn {
+      background: linear-gradient(180deg, #c9a227, #8b6914);
+      color: #1a120b;
+      border: none;
+      padding: 14px 36px;
+      font-size: 1.25rem;
+      font-weight: 800;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #5c440c, 0 8px 20px rgba(0,0,0,0.5);
+      transition: transform 0.1s, box-shadow 0.1s;
+      pointer-events: auto;
+    }
+    .btn:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #5c440c, 0 4px 10px rgba(0,0,0,0.5);
+    }
+    .controls {
+      margin-top: 28px;
+      font-size: 0.95rem;
+      color: #a89060;
+      line-height: 1.6;
+    }
+    .controls kbd {
+      display: inline-block;
+      background: #3a2a15;
+      border: 1px solid #8b6914;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-family: monospace;
+      color: #ffd700;
+    }
+    #final-score {
+      font-size: 1.4rem;
+      margin: 12px 0 24px;
+      color: #ffd700;
+    }
+    .mobile-hint { display: none; }
+    @media (max-width: 600px) {
+      .desktop-hint { display: none; }
+      .mobile-hint { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <div id="ui">
+    <div class="top-bar">
+      <div class="stat">Score: <span id="score">0</span></div>
+      <div class="stat">Goud: <span id="coins">0</span></div>
+      <div class="stat">Snelheid: <span id="speed">1.0</span>x</div>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <h1>Medieval Rush</h1>
+    <p class="subtitle">Jij bent een ridder die door middeleeuwse dorpen rent!<br>Verzamel goud en ontwijk de obstakels.</p>
+    <button class="btn" id="start-btn">Start Avontuur</button>
+    <div class="controls desktop-hint">
+      <kbd>←</kbd> <kbd>→</kbd> of <kbd>A</kbd> <kbd>D</kbd> — van rij wisselen<br>
+      <kbd>Spatie</kbd> / <kbd>↑</kbd> — springen<br>
+      <kbd>↓</kbd> / <kbd>S</kbd> — duiken
+    </div>
+    <div class="controls mobile-hint">
+      Veeg links/rechts om van rij te wisselen<br>
+      Veeg omhoog om te springen<br>
+      Veeg omlaag om te duiken
+    </div>
+  </div>
+
+  <div id="overlay-gameover" class="hidden" style="position:absolute;inset:0;background:rgba(10,6,2,0.9);display:none;flex-direction:column;align-items:center;justify-content:center;pointer-events:auto;text-align:center;padding:20px;">
+    <h1>Gevallen in de strijd!</h1>
+    <p id="final-score">Score: 0</p>
+    <button class="btn" id="restart-btn">Opnieuw proberen</button>
+  </div>
+
+  <div id="wc-caption" style="position:absolute;left:50%;top:22%;transform:translateX(-50%);padding:12px 20px;border-radius:12px;background:rgba(25,15,8,.86);border:2px solid #c9a227;color:#ffe7a8;font-weight:900;font-size:clamp(20px,4vw,34px);text-align:center;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;">💨 PFFFFT! De ridder neemt even pauze…</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // ---------- Config ----------
+    const LANES = [-2.2, 0, 2.2];
+    const LANE_SWITCH_SPEED = 12;
+    const JUMP_FORCE = 11;
+    const GRAVITY = 28;
+    const SLIDE_DURATION = 0.7;
+    const BASE_SPEED = 18;
+    const SPEED_INCREASE = 0.15; // per second
+    const MAX_SPEED_MULT = 2.8;
+    const SPAWN_DIST = 90;
+    const DESPAWN_Z = 12; // objects behind the player get removed
+
+    // ---------- State ----------
+    let scene, camera, renderer;
+    let player, playerMesh;
+    let groundPieces = [];
+    let obstacles = [];
+    let coins = [];
+    let decorations = [];
+    let score = 0;
+    let coinCount = 0;
+    let distance = 0;
+    let nextCityGateScore = 1000; // Een echte stadspoort bij elke 1.000 punten.
+    let wcCutscene = null;
+    let wcShown = false;
+    let wcAudioContext = null;
+    let speedMult = 1;
+    let isPlaying = false;
+    let isGameOver = false;
+    let currentLane = 1; // 0 left, 1 center, 2 right
+    let targetX = 0;
+    let velocityY = 0;
+    let isJumping = false;
+    let isSliding = false;
+    let slideTimer = 0;
+    let clock = new THREE.Clock();
+    let lastSpawnZ = -25;
+    let spawnInterval = 14;
+
+    // Procedural, tileable surfaces make the world feel less like a collection of plain blocks.
+    function makeSurfaceTexture(kind, size = 512) {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const palettes = {
+        stone: ['#8d8375', '#a09687', '#776f65', '#b0a493'],
+        plaster: ['#c9b393', '#d9c5a2', '#b8a383', '#e0ceb0'],
+        wood: ['#65462f', '#795638', '#563a28', '#8a6543'],
+        roof: ['#744638', '#8a5140', '#633b32', '#9a6048'],
+        cobble: ['#77736b', '#918a7e', '#a49b8c', '#68665f'],
+        earth: ['#536b3d', '#63794a', '#71834f', '#596d40']
+      };
+      const colors = palettes[kind] || palettes.stone;
+      ctx.fillStyle = colors[0];
+      ctx.fillRect(0, 0, size, size);
+      if (kind === 'stone' || kind === 'cobble') {
+        const rowH = kind === 'stone' ? 58 : 48;
+        for (let y = 0, row = 0; y < size + rowH; y += rowH, row++) {
+          let x = row % 2 ? -35 : 0;
+          while (x < size) {
+            const w = 72 + Math.random() * 72;
+            const h = rowH - 5 + Math.random() * 5;
+            ctx.fillStyle = colors[1 + Math.floor(Math.random() * (colors.length - 1))];
+            ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+            ctx.strokeStyle = kind === 'stone' ? 'rgba(48,43,37,.34)' : 'rgba(45,43,39,.4)';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x + 2, y + 2, w - 4, h - 4);
+            ctx.strokeStyle = 'rgba(255,255,255,.10)';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(x + 5, y + 5); ctx.lineTo(x + w - 7, y + 5); ctx.stroke();
+            x += w;
+          }
+        }
+      } else if (kind === 'wood') {
+        const plankH = 64;
+        for (let y = 0; y < size; y += plankH) {
+          ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+          ctx.fillRect(0, y + 2, size, plankH - 4);
+          ctx.strokeStyle = 'rgba(32,19,11,.45)'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(size, y); ctx.stroke();
+          for (let k = 0; k < 18; k++) {
+            const yy = y + Math.random() * (plankH - 8) + 4;
+            const xx = Math.random() * size;
+            ctx.strokeStyle = 'rgba(35,20,10,' + (0.08 + Math.random() * 0.18) + ')';
+            ctx.lineWidth = 1 + Math.random() * 2;
+            ctx.beginPath(); ctx.moveTo(xx, yy); ctx.bezierCurveTo(xx + 30, yy - 5, xx + 60, yy + 5, xx + 120, yy); ctx.stroke();
+          }
+        }
+      } else if (kind === 'roof') {
+        const tileW = 48, tileH = 34;
+        for (let y = 0, row = 0; y < size + tileH; y += tileH, row++) {
+          for (let x = (row % 2) * -tileW / 2; x < size + tileW; x += tileW) {
+            ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+            ctx.beginPath(); ctx.moveTo(x + 2, y + 2); ctx.lineTo(x + tileW - 2, y + 2);
+            ctx.lineTo(x + tileW - 3, y + tileH - 2); ctx.quadraticCurveTo(x + tileW / 2, y + tileH + 5, x + 3, y + tileH - 2); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = 'rgba(38,22,17,.3)'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.strokeStyle = 'rgba(255,220,190,.13)'; ctx.beginPath(); ctx.moveTo(x + 5, y + 5); ctx.lineTo(x + tileW - 6, y + 5); ctx.stroke();
+          }
+        }
+      } else if (kind === 'plaster' || kind === 'earth') {
+        for (let i = 0; i < 7000; i++) {
+          ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+          ctx.globalAlpha = 0.06 + Math.random() * 0.12;
+          const r = 1 + Math.random() * 5;
+          ctx.fillRect(Math.random() * size, Math.random() * size, r, r);
+        }
+        ctx.globalAlpha = 1;
+      }
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.anisotropy = 4;
+      return texture;
+    }
+
+    const surfaceMaps = {
+      stone: makeSurfaceTexture('stone'), plaster: makeSurfaceTexture('plaster'),
+      wood: makeSurfaceTexture('wood'), roof: makeSurfaceTexture('roof'),
+      cobble: makeSurfaceTexture('cobble'), earth: makeSurfaceTexture('earth')
+    };
+
+    const surfaceMaterialCache = new Map();
+    function surfaceMaterial(kind, repeatX = 1, repeatY = 1, options = {}) {
+      const key = `${kind}|${repeatX}|${repeatY}|${JSON.stringify(options)}`;
+      if (surfaceMaterialCache.has(key)) return surfaceMaterialCache.get(key);
+      const map = surfaceMaps[kind].clone();
+      map.repeat.set(repeatX, repeatY);
+      map.needsUpdate = true;
+      const material = new THREE.MeshStandardMaterial({ map, color: 0xffffff, roughness: 0.94, ...options });
+      surfaceMaterialCache.set(key, material);
+      return material;
+    }
+
+    // DOM
+    const canvas = document.getElementById('game-canvas');
+    const scoreEl = document.getElementById('score');
+    const coinsEl = document.getElementById('coins');
+    const speedEl = document.getElementById('speed');
+    const overlay = document.getElementById('overlay');
+    const overlayGO = document.getElementById('overlay-gameover');
+    const finalScoreEl = document.getElementById('final-score');
+    const startBtn = document.getElementById('start-btn');
+    const restartBtn = document.getElementById('restart-btn');
+
+    // ---------- Init ----------
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xb8c8d0); // zacht bewolkte hemel
+      scene.fog = new THREE.Fog(0xb8c8d0, 48, 125); // natuurlijke diepte in de verte
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+      camera.position.set(0, 5.5, 8);
+      camera.lookAt(0, 1.5, -10);
+
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+
+      // Zacht omgevingslicht plus een warme zon voor meer vorm en diepte.
+      const ambient = new THREE.HemisphereLight(0xe2edf3, 0x66543e, 0.88);
+      scene.add(ambient);
+
+      const sun = new THREE.DirectionalLight(0xffe4bd, 2.1);
+      sun.position.set(12, 28, 8);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(1024, 1024);
+      sun.shadow.bias = -0.00015;
+      sun.shadow.normalBias = 0.025;
+      sun.shadow.camera.near = 1;
+      sun.shadow.camera.far = 80;
+      sun.shadow.camera.left = -25;
+      sun.shadow.camera.right = 25;
+      sun.shadow.camera.top = 25;
+      sun.shadow.camera.bottom = -25;
+      scene.add(sun);
+
+      // Extra fill light
+      const fill = new THREE.DirectionalLight(0xc8d9e8, 0.28);
+      fill.position.set(-10, 15, -5);
+      scene.add(fill);
+
+      // Player
+      createPlayer();
+
+      // Initial ground
+      for (let i = 0; i < 8; i++) {
+        createGroundPiece(i * 20 - 20);
+      }
+
+      // Starting village decorations
+      for (let i = 0; i < 18; i++) {
+        spawnDecoration(-20 + i * 12);
+      }
+
+      window.addEventListener('resize', onResize);
+      setupControls();
+      animate();
+    }
+
+    function createPlayer() {
+      player = new THREE.Group();
+      player.position.set(0, 0, 0);
+
+      // === RIDDER MODEL ===
+      const armorMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, metalness: 0.85, roughness: 0.3 });
+      const darkArmor = new THREE.MeshStandardMaterial({ color: 0x4a4e55, metalness: 0.8, roughness: 0.35 });
+      const goldMat = new THREE.MeshStandardMaterial({ color: 0xc9a227, metalness: 0.9, roughness: 0.25 });
+      const capeMat = new THREE.MeshStandardMaterial({ color: 0x6b1e1e, roughness: 0.85 });
+
+      // Legs (armor greaves) – pivot at top of leg
+      const legGeo = new THREE.BoxGeometry(0.32, 0.75, 0.32);
+      legGeo.translate(0, -0.375, 0); // so rotation happens at hip
+
+      const leftLeg = new THREE.Mesh(legGeo, armorMat);
+      leftLeg.position.set(-0.2, 0.75, 0);
+      leftLeg.castShadow = true;
+      player.add(leftLeg);
+
+      const rightLeg = new THREE.Mesh(legGeo, armorMat);
+      rightLeg.position.set(0.2, 0.75, 0);
+      rightLeg.castShadow = true;
+      player.add(rightLeg);
+
+      // Torso (chest plate)
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.8, 0.4), armorMat);
+      torso.position.y = 1.1;
+      torso.castShadow = true;
+      player.add(torso);
+
+      // Shoulder pads
+      const shoulderGeo = new THREE.BoxGeometry(0.28, 0.22, 0.35);
+      const leftShoulder = new THREE.Mesh(shoulderGeo, darkArmor);
+      leftShoulder.position.set(-0.42, 1.4, 0);
+      leftShoulder.castShadow = true;
+      player.add(leftShoulder);
+      const rightShoulder = new THREE.Mesh(shoulderGeo, darkArmor);
+      rightShoulder.position.set(0.42, 1.4, 0);
+      rightShoulder.castShadow = true;
+      player.add(rightShoulder);
+
+      // Helmet
+      const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.27, 18, 14), armorMat);
+      helmet.scale.set(1, 0.92, 1.05);
+      helmet.position.y = 1.76;
+      helmet.castShadow = true;
+      player.add(helmet);
+
+      // Voorplaat, smalle kijkgleuf en wangstukken op de helm.
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.075, 0.12), darkArmor);
+      visor.position.set(0, 1.72, 0.235);
+      player.add(visor);
+      const noseGuard = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.27, 0.09), armorMat);
+      noseGuard.position.set(0, 1.62, 0.27); player.add(noseGuard);
+      for (const side of [-1, 1]) {
+        const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.25, 0.18), armorMat);
+        cheek.position.set(side * 0.19, 1.62, 0.13); cheek.rotation.z = side * -0.12; player.add(cheek);
+        const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), goldMat);
+        rivet.position.set(side * 0.17, 1.82, 0.235); player.add(rivet);
+      }
+
+      // Gebogen borstplaat, riem en gouden gesp geven het harnas meer detail.
+      const breastplate = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), armorMat);
+      breastplate.scale.set(0.31, 0.34, 0.12); breastplate.position.set(0, 1.18, 0.215);
+      breastplate.castShadow = true; player.add(breastplate);
+      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.12, 0.43), darkArmor);
+      belt.position.set(0, 0.82, 0.015); player.add(belt);
+      const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.14, 0.045), goldMat);
+      buckle.position.set(0, 0.82, 0.25); player.add(buckle);
+      for (const side of [-1, 1]) {
+        const knee = new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 8), darkArmor);
+        knee.scale.set(0.9, 0.62, 0.7); knee.position.set(side * 0.2, 0.42, 0.16); player.add(knee);
+      }
+
+      // Plume / crest on helmet
+      const plume = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.35, 0.12), capeMat);
+      plume.position.set(0, 2.05, -0.05);
+      player.add(plume);
+
+      // Cape
+      const cape = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.08), capeMat);
+      cape.position.set(0, 1.15, -0.28);
+      cape.castShadow = true;
+      player.add(cape);
+
+      // Sword on left side
+      const sword = new THREE.Group();
+      const swordHandle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.08), goldMat);
+      swordHandle.position.y = 0.2;
+      sword.add(swordHandle);
+      const swordBlade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.7, 0.04), armorMat);
+      swordBlade.position.y = -0.25;
+      sword.add(swordBlade);
+      sword.position.set(-0.48, 0.95, 0.1);
+      player.add(sword);
+
+      // Small shield on right arm
+      const shield = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.4), darkArmor);
+      shield.position.set(0.5, 1.05, 0.05);
+      shield.castShadow = true;
+      player.add(shield);
+      // Shield emblem
+      const emblem = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.2), goldMat);
+      emblem.position.set(0.55, 1.1, 0.05);
+      player.add(emblem);
+
+      // Store references for animation
+      player.userData = {
+        leftLeg,
+        rightLeg,
+        torso,
+        leftShoulder,
+        rightShoulder,
+        helmet,
+        cape,
+        plume,
+        sword,
+        shield,
+        runPhase: 0
+      };
+
+      playerMesh = player;
+      scene.add(player);
+    }
+
+    function createGroundPiece(z) {
+      const group = new THREE.Group();
+      group.position.z = z;
+
+      // Lichtere kasseien
+      const pathGeo = new THREE.BoxGeometry(7.5, 0.3, 20.2);
+      const pathMat = surfaceMaterial('cobble', 2.2, 5.5, { roughness: 1, metalness: 0 });
+      const path = new THREE.Mesh(pathGeo, pathMat);
+      path.position.y = -0.15;
+      path.receiveShadow = true;
+      group.add(path);
+
+      // Lichtere grasranden
+      const sideGeo = new THREE.BoxGeometry(12, 0.25, 20.2);
+      const sideMat = surfaceMaterial('earth', 3.5, 5, { roughness: 1 });
+      const leftSide = new THREE.Mesh(sideGeo, sideMat);
+      leftSide.position.set(-9, -0.2, 0);
+      leftSide.receiveShadow = true;
+      group.add(leftSide);
+      const rightSide = new THREE.Mesh(sideGeo, sideMat);
+      rightSide.position.set(9, -0.2, 0);
+      rightSide.receiveShadow = true;
+      group.add(rightSide);
+
+      // Individuele, licht ongelijke kasseien in plaats van een gladde weg.
+      const paverMat = surfaceMaterial('cobble', 1.15, 1.15, { roughness: 1 });
+      const pavers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.84, 0.075, 1.68), paverMat, 9 * 8);
+      const dummy = new THREE.Object3D();
+      let index = 0;
+      for (let row = 0; row < 9; row++) {
+        for (let col = 0; col < 8; col++) {
+          dummy.position.set(-3.08 + col * 0.88 + (row % 2) * 0.18 + (Math.random() - 0.5) * 0.08,
+            0.035 + Math.random() * 0.018, -8 + row * 2 + (Math.random() - 0.5) * 0.12);
+          dummy.rotation.set((Math.random() - 0.5) * 0.025, (Math.random() - 0.5) * 0.06, (Math.random() - 0.5) * 0.025);
+          dummy.scale.set(0.92 + Math.random() * 0.14, 0.8 + Math.random() * 0.5, 0.9 + Math.random() * 0.15);
+          dummy.updateMatrix();
+          pavers.setMatrixAt(index, dummy.matrix);
+          const shade = 0.78 + Math.random() * 0.34;
+          pavers.setColorAt(index, new THREE.Color(shade, shade * 0.98, shade * 0.94));
+          index++;
+        }
+      }
+      pavers.castShadow = true;
+      pavers.receiveShadow = true;
+      group.add(pavers);
+
+      scene.add(group);
+      groundPieces.push(group);
+    }
+
+    // ---------- Obstacles ----------
+    function createObstacle(type, lane, z) {
+      const group = new THREE.Group();
+      group.position.set(LANES[lane], 0, z);
+      group.userData = { type, lane, width: 1.6, height: 1.4, isHigh: false };
+
+      const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.9 });
+      const darkWood = new THREE.MeshStandardMaterial({ color: 0x3e2a18, roughness: 0.95 });
+      const ironMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.6, roughness: 0.4 });
+
+      if (type === 'cart') {
+        // Wooden cart – jump over
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.9, 1.4), woodMat);
+        body.position.y = 0.55;
+        body.castShadow = true;
+        group.add(body);
+        // Wheels
+        const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.2, 12);
+        wheelGeo.rotateZ(Math.PI / 2);
+        [-0.7, 0.7].forEach(x => {
+          [-0.55, 0.55].forEach(zOff => {
+            const w = new THREE.Mesh(wheelGeo, darkWood);
+            w.position.set(x, 0.35, zOff);
+            w.castShadow = true;
+            group.add(w);
+          });
+        });
+        group.userData.height = 1.1;
+      } else if (type === 'barrel') {
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 1.1, 12), woodMat);
+        barrel.position.y = 0.55;
+        barrel.castShadow = true;
+        group.add(barrel);
+        // Hoops
+        const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.05, 8, 16), ironMat);
+        hoop.rotation.x = Math.PI / 2;
+        hoop.position.y = 0.35;
+        group.add(hoop);
+        group.userData.height = 1.15;
+      } else if (type === 'fence') {
+        // Low fence – jump
+        for (let i = -1; i <= 1; i++) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.0, 0.15), darkWood);
+          post.position.set(i * 0.7, 0.5, 0);
+          post.castShadow = true;
+          group.add(post);
+        }
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 0.12), woodMat);
+        rail.position.y = 0.7;
+        group.add(rail);
+        group.userData.height = 1.05;
+      } else if (type === 'gate') {
+        // High gate – must slide under
+        const left = new THREE.Mesh(new THREE.BoxGeometry(0.25, 2.4, 0.25), darkWood);
+        left.position.set(-0.9, 1.2, 0);
+        left.castShadow = true;
+        group.add(left);
+        const right = new THREE.Mesh(new THREE.BoxGeometry(0.25, 2.4, 0.25), darkWood);
+        right.position.set(0.9, 1.2, 0);
+        right.castShadow = true;
+        group.add(right);
+        const top = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.3, 0.3), woodMat);
+        top.position.y = 2.3;
+        group.add(top);
+        // Banner
+        const banner = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.9), new THREE.MeshStandardMaterial({ color: 0x6b1e1e, side: THREE.DoubleSide }));
+        banner.position.set(0, 1.7, 0.05);
+        group.add(banner);
+        group.userData.isHigh = true;
+        group.userData.height = 1.6; // collision height when standing
+      } else if (type === 'knight') {
+        // Simple knight obstacle
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.3, 0.5), ironMat);
+        body.position.y = 0.9;
+        body.castShadow = true;
+        group.add(body);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), ironMat);
+        head.position.y = 1.75;
+        group.add(head);
+        // Spear
+        const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.2, 6), darkWood);
+        spear.position.set(0.5, 1.4, 0);
+        spear.rotation.z = -0.3;
+        group.add(spear);
+        group.userData.height = 1.9;
+      }
+
+      scene.add(group);
+      obstacles.push(group);
+      return group;
+    }
+
+    function createCoin(lane, z) {
+      const coin = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.28, 0.28, 0.08, 16),
+        new THREE.MeshStandardMaterial({
+          color: 0xffd700,
+          metalness: 0.9,
+          roughness: 0.25,
+          emissive: 0x553300,
+          emissiveIntensity: 0.3
+        })
+      );
+      coin.rotation.x = Math.PI / 2;
+      coin.position.set(LANES[lane], 1.0, z);
+      coin.castShadow = true;
+      coin.userData = { lane, collected: false };
+      scene.add(coin);
+      coins.push(coin);
+      return coin;
+    }
+
+    function createVillager(x, z, forceTorch = false) {
+      const villager = new THREE.Group();
+
+      // Kleine variaties geven de inwoners elk een eigen silhouet.
+      const clothColors = [0x536c4a, 0x76513c, 0x465b78, 0x777044, 0x78634b, 0x75494a];
+      const clothColor = clothColors[Math.floor(Math.random() * clothColors.length)];
+      const clothMat = new THREE.MeshStandardMaterial({ color: clothColor, roughness: 0.94 });
+      const sleeveMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(clothColor).multiplyScalar(0.88), roughness: 0.96 });
+      const skinTones = [0xd9ad83, 0xc58e68, 0xe0bd98, 0xa96f4d];
+      const skinMat = new THREE.MeshStandardMaterial({ color: skinTones[Math.floor(Math.random() * skinTones.length)], roughness: 0.9 });
+      const leatherMat = new THREE.MeshStandardMaterial({ color: 0x493222, roughness: 0.92 });
+      const bootMat = new THREE.MeshStandardMaterial({ color: 0x34251c, roughness: 0.96 });
+      const beltMat = new THREE.MeshStandardMaterial({ color: 0x3b2a1b, roughness: 0.82 });
+      const metalMat = new THREE.MeshStandardMaterial({ color: 0x77756c, metalness: 0.55, roughness: 0.58 });
+      const hairColors = [0x30231b, 0x513525, 0x88704c, 0x25201d];
+      const hairMat = new THREE.MeshStandardMaterial({ color: hairColors[Math.floor(Math.random() * hairColors.length)], roughness: 1 });
+      const torchWood = new THREE.MeshStandardMaterial({ color: 0x684326, roughness: 0.95 });
+      const torchMat = new THREE.MeshStandardMaterial({ color: 0xff8a18, emissive: 0xff4a00, emissiveIntensity: 1.15, roughness: 0.45 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x30221c, roughness: 0.95 });
+
+      // Benen: boven- en onderbeen zitten aan echte heup- en kniegewrichten.
+      const makeLeg = (side) => {
+        const hip = new THREE.Group();
+        hip.position.set(side * 0.145, 0.88, 0);
+        villager.add(hip);
+
+        const upperLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, 0.24, 4, 8), clothMat);
+        upperLeg.position.y = -0.215;
+        upperLeg.castShadow = true;
+        hip.add(upperLeg);
+
+        const knee = new THREE.Mesh(new THREE.SphereGeometry(0.095, 10, 8), clothMat);
+        knee.position.y = -0.405;
+        hip.add(knee);
+
+        const shin = new THREE.Group();
+        shin.position.y = -0.405;
+        hip.add(shin);
+        const lowerLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.082, 0.24, 4, 8), sleeveMat);
+        lowerLeg.position.y = -0.19;
+        lowerLeg.castShadow = true;
+        shin.add(lowerLeg);
+
+        const boot = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.14, 0.32), bootMat);
+        boot.position.set(0, -0.405, 0.07);
+        boot.castShadow = true;
+        shin.add(boot);
+        const sole = new THREE.Mesh(new THREE.BoxGeometry(0.195, 0.035, 0.325), darkMat);
+        sole.position.set(0, -0.465, 0.07);
+        shin.add(sole);
+        return { hip, shin };
+      };
+
+      const leftLegParts = makeLeg(-1);
+      const rightLegParts = makeLeg(1);
+
+      // Tuniek met afgeronde schouders, een zichtbare zoom, riem en leren buidel.
+      const torso = new THREE.Group();
+      torso.position.y = 1.12;
+      villager.add(torso);
+      const tunic = new THREE.Mesh(new THREE.CylinderGeometry(0.255, 0.365, 0.91, 14, 2), clothMat);
+      tunic.position.y = 0.04;
+      tunic.castShadow = true;
+      tunic.receiveShadow = true;
+      torso.add(tunic);
+      const chest = new THREE.Mesh(new THREE.SphereGeometry(0.285, 14, 10), clothMat);
+      chest.scale.set(1, 0.8, 0.82);
+      chest.position.set(0, 0.38, 0);
+      chest.castShadow = true;
+      torso.add(chest);
+
+      const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.315, 0.335, 0.085, 14), beltMat);
+      belt.position.y = -0.22;
+      torso.add(belt);
+      const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.095, 0.035), metalMat);
+      buckle.position.set(0, -0.22, 0.333);
+      torso.add(buckle);
+      const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.2, 0.12), leatherMat);
+      pouch.position.set(-0.25, -0.31, 0.12);
+      pouch.rotation.z = -0.12;
+      torso.add(pouch);
+
+      // Een klein overschort en een paar naden maken de kleding minder speelgoedachtig.
+      const apron = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.48, 0.035), sleeveMat);
+      apron.position.set(0, -0.49, 0.325);
+      apron.rotation.x = -0.06;
+      torso.add(apron);
+      const hem = new THREE.Mesh(new THREE.BoxGeometry(0.37, 0.045, 0.04), clothMat);
+      hem.position.set(0, -0.735, 0.33);
+      torso.add(hem);
+
+      // Nek en hoofd zitten los van de romp zodat het hoofd natuurlijk kan meebewegen.
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.105, 0.2, 10), skinMat);
+      neck.position.y = 1.66;
+      villager.add(neck);
+      const headPivot = new THREE.Group();
+      headPivot.position.set(0, 1.91, 0.015);
+      villager.add(headPivot);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.205, 18, 14), skinMat);
+      head.scale.set(0.92, 1.08, 0.92);
+      head.castShadow = true;
+      headPivot.add(head);
+
+      // Gezicht kijkt naar de speler (de voorkant van het figuur is +Z).
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(0.052, 10, 8), skinMat);
+      nose.scale.set(0.75, 0.85, 1.25);
+      nose.position.set(0, -0.005, 0.19);
+      headPivot.add(nose);
+      const eyeWhite = new THREE.MeshStandardMaterial({ color: 0xe8dfcf, roughness: 0.8 });
+      const eyeMat = new THREE.MeshStandardMaterial({ color: 0x29231e, roughness: 0.75 });
+      for (const side of [-1, 1]) {
+        const ear = new THREE.Mesh(new THREE.SphereGeometry(0.055, 9, 7), skinMat);
+        ear.position.set(side * 0.19, -0.005, 0.005);
+        headPivot.add(ear);
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), eyeWhite);
+        eye.position.set(side * 0.075, 0.045, 0.174);
+        headPivot.add(eye);
+        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.012, 7, 5), eyeMat);
+        pupil.position.set(side * 0.075, 0.043, 0.196);
+        headPivot.add(pupil);
+      }
+      const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.018, 0.018), darkMat);
+      mouth.position.set(0, -0.095, 0.184);
+      headPivot.add(mouth);
+
+      // Haar, muts of kap; af en toe een korte baard.
+      if (Math.random() > 0.42) {
+        const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 8), hairMat);
+        hairCap.scale.set(1.02, 0.57, 1.02);
+        hairCap.position.y = 0.125;
+        headPivot.add(hairCap);
+        const backHair = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), hairMat);
+        backHair.scale.set(1, 1.1, 0.62);
+        backHair.position.set(0, -0.055, -0.105);
+        headPivot.add(backHair);
+      } else {
+        const hatMat = new THREE.MeshStandardMaterial({ color: Math.random() > 0.5 ? 0x493323 : 0x66513a, roughness: 0.96 });
+        const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.245, 0.245, 0.045, 12), hatMat);
+        brim.position.y = 0.17;
+        headPivot.add(brim);
+        const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.205, 0.19, 10), hatMat);
+        cap.position.y = 0.27;
+        headPivot.add(cap);
+      }
+      if (Math.random() > 0.58) {
+        const beard = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), hairMat);
+        beard.scale.set(0.9, 1.05, 0.55);
+        beard.position.set(0, -0.14, 0.12);
+        headPivot.add(beard);
+      }
+
+      // Schouders, bovenarmen, ellebogen, onderarmen en handen als losse gewrichten.
+      const makeArm = (side) => {
+        const shoulder = new THREE.Group();
+        shoulder.position.set(side * 0.285, 1.48, 0);
+        villager.add(shoulder);
+        const upperArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.22, 4, 8), sleeveMat);
+        upperArm.position.y = -0.19;
+        upperArm.castShadow = true;
+        shoulder.add(upperArm);
+        const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.082, 9, 7), sleeveMat);
+        elbow.position.y = -0.38;
+        shoulder.add(elbow);
+        const forearmPivot = new THREE.Group();
+        forearmPivot.position.y = -0.38;
+        shoulder.add(forearmPivot);
+        const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.072, 0.2, 4, 8), skinMat);
+        forearm.position.y = -0.17;
+        forearm.castShadow = true;
+        forearmPivot.add(forearm);
+        const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.078, 0.075, 9), clothMat);
+        cuff.position.y = -0.31;
+        forearmPivot.add(cuff);
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.082, 10, 8), skinMat);
+        hand.scale.set(0.9, 1.05, 0.88);
+        hand.position.y = -0.365;
+        forearmPivot.add(hand);
+        return { shoulder, forearmPivot, hand };
+      };
+      const leftArmParts = makeArm(-1);
+      const rightArmParts = makeArm(1);
+      leftArmParts.shoulder.rotation.z = 0.14;
+      rightArmParts.shoulder.rotation.z = -0.18;
+      rightArmParts.forearmPivot.rotation.z = 0.2;
+
+      // Gereedschap sluit aan op de hand in plaats van los naast de arm te zweven.
+      let torchFlame = null;
+      if (forceTorch || Math.random() > 0.45) {
+        const torch = new THREE.Group();
+        torch.position.set(0, -0.34, 0.015);
+        rightArmParts.forearmPivot.add(torch);
+        const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.027, 0.035, 0.62, 8), torchWood);
+        grip.position.y = 0.32;
+        torch.add(grip);
+        const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.09, 8), metalMat);
+        collar.position.y = 0.62;
+        torch.add(collar);
+        const flame = new THREE.Mesh(new THREE.SphereGeometry(0.105, 10, 8), torchMat);
+        flame.scale.set(0.78, 1.45, 0.78);
+        flame.position.y = 0.77;
+        torch.add(flame);
+        const flameTip = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.17, 8), torchMat);
+        flameTip.position.y = 0.91;
+        torch.add(flameTip);
+        const torchLight = new THREE.PointLight(0xff7628, 0.38, 3.0);
+        torchLight.position.y = 0.78;
+        torch.add(torchLight);
+        torchFlame = flame;
+      } else {
+        const fork = new THREE.Group();
+        fork.position.set(0, -0.34, 0.015);
+        rightArmParts.forearmPivot.add(fork);
+        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 1.12, 7), torchWood);
+        handle.position.y = 0.52;
+        fork.add(handle);
+        const headBar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.045, 0.045), torchWood);
+        headBar.position.y = 1.08;
+        fork.add(headBar);
+        for (let i = -1; i <= 1; i++) {
+          const tine = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 6), metalMat);
+          tine.position.set(i * 0.12, 1.19, 0);
+          fork.add(tine);
+        }
+      }
+
+      // De figuren kijken naar de speler; hun anatomische delen bewegen onafhankelijk.
+      villager.position.set(x, 0, z);
+      villager.lookAt(player.position.x, 0, player.position.z);
+      villager.userData = {
+        phase: Math.random() * Math.PI * 2,
+        isVillager: true,
+        torso, head: headPivot,
+        leftArm: leftArmParts.shoulder,
+        rightArm: rightArmParts.shoulder,
+        leftForearm: leftArmParts.forearmPivot,
+        rightForearm: rightArmParts.forearmPivot,
+        leftLeg: leftLegParts.hip,
+        rightLeg: rightLegParts.hip,
+        leftShin: leftLegParts.shin,
+        rightShin: rightLegParts.shin,
+        flame: torchFlame
+      };
+      scene.add(villager);
+      decorations.push(villager);
+      return villager;
+    }
+
+    // Echte stadstoegang: een brede stadsmuur, poortgebouw, open deuren en een straat met huizen erachter.
+    function spawnCityGate(z) {
+      const gate = new THREE.Group();
+      const stone = surfaceMaterial('stone', 2.5, 2.2, { roughness: 1 });
+      const lightStone = surfaceMaterial('stone', 1.5, 1.5, { roughness: 1 });
+      const darkStone = new THREE.MeshStandardMaterial({ color: 0x594d40, roughness: 1 });
+      const timber = surfaceMaterial('wood', 1.2, 2.8, { roughness: 0.93 });
+      const timberLight = surfaceMaterial('wood', 0.8, 2.2, { roughness: 0.9 });
+      const plaster = surfaceMaterial('plaster', 1.5, 1.8, { roughness: 1 });
+      const roofMat = surfaceMaterial('roof', 2.2, 2.2, { roughness: 0.96 });
+      const roofLight = surfaceMaterial('roof', 2.2, 2.2, { roughness: 0.96 });
+      const iron = new THREE.MeshStandardMaterial({ color: 0x393b3a, metalness: 0.55, roughness: 0.55 });
+      const gold = new THREE.MeshStandardMaterial({ color: 0xc7a34b, metalness: 0.45, roughness: 0.5 });
+      const woodDoor = surfaceMaterial('wood', 1.5, 3.5, { roughness: 1 });
+      const torchMat = new THREE.MeshStandardMaterial({ color: 0xff8a22, emissive: 0xff4a00, emissiveIntensity: 1.7 });
+      const flames = [];
+
+      const box = (parent, w, h, d, mat, x, y, zz, cast = true) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        mesh.position.set(x, y, zz);
+        mesh.castShadow = cast;
+        mesh.receiveShadow = true;
+        parent.add(mesh);
+        return mesh;
+      };
+
+      // Lange stenen vestingmuur links en rechts: de poort vormt één geheel met de stadsmuur.
+      for (const side of [-1, 1]) {
+        box(gate, 5.5, 4.25, 1.65, stone, side * 7.05, 2.12, 0);
+        box(gate, 5.55, 0.24, 1.82, lightStone, side * 7.05, 4.28, 0);
+        // Kantelen op de muur.
+        for (let i = 0; i < 7; i++) {
+          box(gate, 0.48, 0.55, 0.52, lightStone, side * (4.65 + i * 0.78), 4.66, 0);
+        }
+        // Donkere schietgaten in de muur.
+        for (let i = 0; i < 3; i++) {
+          box(gate, 0.13, 0.72, 0.06, darkStone, side * (5.4 + i * 1.55), 2.95, 0.86, false);
+        }
+
+        // Zware toren naast de doorgang.
+        const tx = side * 4.05;
+        box(gate, 1.95, 5.25, 2.35, stone, tx, 2.62, 0.02);
+        box(gate, 2.08, 0.28, 2.48, lightStone, tx, 5.25, 0.02);
+        // Uitkragende houten verdedigingsrand.
+        box(gate, 2.35, 0.3, 2.7, timber, tx, 5.48, 0.02);
+        for (let i = -2; i <= 2; i++) {
+          box(gate, 0.13, 0.75, 0.14, timberLight, tx + i * 0.43, 5.83, 1.18);
+        }
+        // Bovenverdieping van de toren.
+        box(gate, 1.82, 1.35, 2.12, plaster, tx, 6.45, 0.02);
+        box(gate, 1.96, 0.13, 2.25, timber, tx, 7.12, 0.02);
+        // Houten vakwerk aan de voorzijde.
+        box(gate, 0.13, 1.34, 0.1, timber, tx - 0.66, 6.45, 1.13);
+        box(gate, 0.13, 1.34, 0.1, timber, tx + 0.66, 6.45, 1.13);
+        box(gate, 1.35, 0.12, 0.1, timber, tx, 6.48, 1.13);
+        // Klein raam met donkere opening.
+        box(gate, 0.48, 0.66, 0.08, darkStone, tx, 6.55, 1.19, false);
+        box(gate, 0.08, 0.72, 0.1, timberLight, tx, 6.55, 1.25);
+        box(gate, 0.56, 0.08, 0.1, timberLight, tx, 6.55, 1.25);
+        // Schuin pannendak boven elke toren.
+        const leftRoof = box(gate, 2.5, 0.18, 2.85, roofMat, tx - 0.62, 7.42, 0.02);
+        leftRoof.rotation.z = 0.25;
+        const rightRoof = box(gate, 2.5, 0.18, 2.85, roofMat, tx + 0.62, 7.42, 0.02);
+        rightRoof.rotation.z = -0.25;
+        // Dakrand en houten draagbalken.
+        box(gate, 2.9, 0.13, 3.0, timber, tx, 7.17, 0.02);
+        for (let i = -1; i <= 1; i++) {
+          box(gate, 0.09, 0.45, 0.12, timber, tx + i * 0.72, 5.72, 1.22);
+        }
+      }
+
+      // Hoge, open doorgang met dikke stenen stijlen.
+      box(gate, 0.72, 4.45, 1.95, lightStone, -3.38, 2.22, 0.08);
+      box(gate, 0.72, 4.45, 1.95, lightStone, 3.38, 2.22, 0.08);
+      // Boogstenen boven de doorgang.
+      const archRadius = 3.34;
+      for (let i = 0; i <= 12; i++) {
+        const a = (i / 12) * Math.PI;
+        const voussoir = box(
+          gate, 0.62, 0.48, 1.98, (i % 2 === 0 ? lightStone : stone),
+          Math.cos(a) * archRadius, 3.95 + Math.sin(a) * 1.28, 0.08
+        );
+        voussoir.rotation.z = Math.PI / 2 - a;
+      }
+      // Bovenbouw als een vakwerkhuis dat de poort overspant (zoals op de voorbeelden).
+      box(gate, 7.05, 1.55, 2.15, plaster, 0, 5.36, -0.02);
+      box(gate, 7.22, 0.16, 2.28, timber, 0, 4.62, -0.02);
+      box(gate, 7.22, 0.16, 2.28, timber, 0, 6.12, -0.02);
+      box(gate, 0.15, 1.54, 0.12, timber, -3.35, 5.36, 1.08);
+      box(gate, 0.15, 1.54, 0.12, timber, 3.35, 5.36, 1.08);
+      box(gate, 0.15, 1.54, 0.12, timber, 0, 5.36, 1.08);
+      for (let i = -3; i <= 3; i++) {
+        box(gate, 0.1, 1.5, 0.12, timberLight, i * 0.92, 5.36, 1.1);
+      }
+      // Ramen en horizontale vakwerkbalk.
+      for (const x of [-2.35, -1.35, 1.35, 2.35]) {
+        box(gate, 0.48, 0.58, 0.08, darkStone, x, 5.55, 1.17, false);
+        box(gate, 0.08, 0.68, 0.1, timberLight, x, 5.55, 1.23);
+        box(gate, 0.54, 0.08, 0.1, timberLight, x, 5.55, 1.23);
+      }
+      box(gate, 7.1, 0.13, 0.12, timber, 0, 5.35, 1.13);
+      // Breed zadeldak boven het poortgebouw.
+      const bridgeRoofL = box(gate, 4.0, 0.2, 2.95, roofLight, -1.75, 6.5, -0.02);
+      bridgeRoofL.rotation.z = 0.31;
+      const bridgeRoofR = box(gate, 4.0, 0.2, 2.95, roofLight, 1.75, 6.5, -0.02);
+      bridgeRoofR.rotation.z = -0.31;
+      box(gate, 7.9, 0.14, 3.05, timber, 0, 6.23, -0.02);
+
+      // De zware houten poortdeuren staan open tegen de binnenwanden.
+      for (const side of [-1, 1]) {
+        const door = new THREE.Group();
+        box(door, 2.25, 3.45, 0.22, woodDoor, side * 1.12, 1.78, 0, true);
+        for (let i = 0; i < 7; i++) {
+          box(door, 0.06, 3.28, 0.06, timberLight, -side * (0.2 + i * 0.3), 1.78, 0.15, false);
+        }
+        box(door, 2.24, 0.16, 0.12, iron, side * 1.12, 3.24, 0.2, false);
+        box(door, 2.24, 0.16, 0.12, iron, side * 1.12, 0.33, 0.2, false);
+        const hingeX = side * 2.9;
+        door.position.set(hingeX, 0, -0.72);
+        door.rotation.y = side * -Math.PI / 2.35;
+        gate.add(door);
+      }
+
+      // Stadskant: een geplaveide straat loopt zichtbaar door de poort naar binnen.
+      const street = box(gate, 7.25, 0.09, 25, surfaceMaterial('cobble', 2.2, 7, { roughness: 1 }), 0, 0.035, -13.1, false);
+      street.receiveShadow = true;
+      const curbMat = new THREE.MeshStandardMaterial({ color: 0xaaa08f, roughness: 1 });
+      box(gate, 0.24, 0.18, 25, curbMat, -3.72, 0.09, -13.1, false);
+      box(gate, 0.24, 0.18, 25, curbMat, 3.72, 0.09, -13.1, false);
+      const pavingMats = [
+        new THREE.MeshStandardMaterial({ color: 0xaaa092, roughness: 1 }),
+        new THREE.MeshStandardMaterial({ color: 0x938879, roughness: 1 }),
+        new THREE.MeshStandardMaterial({ color: 0xb7aa96, roughness: 1 })
+      ];
+      for (let row = 0; row < 12; row++) {
+        for (let col = 0; col < 7; col++) {
+          const paver = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.035, 1.65), pavingMats[(row + col) % pavingMats.length]);
+          paver.position.set(-3.15 + col * 1.05 + (row % 2) * 0.22, 0.095, -2.7 - row * 2.05);
+          paver.receiveShadow = true;
+          gate.add(paver);
+        }
+      }
+
+      // Binnen de stad staan gevels en huizen langs de straat; het midden blijft vrij voor de renbaan.
+      function addCityHouse(side, zz, variant = 0) {
+        const house = new THREE.Group();
+        const hx = side * (5.75 + variant * 0.35);
+        const width = variant ? 3.25 : 3.7;
+        const height = variant ? 3.25 : 3.7;
+        box(house, width, height, 3.5, variant ? plaster : stone, hx, height / 2, zz);
+        // Vakwerkgevel aan de straatzijde.
+        const frontZ = zz + 1.78;
+        box(house, width + 0.16, 0.13, 0.14, timber, hx, height - 0.35, frontZ);
+        box(house, 0.13, height - 0.25, 0.14, timber, hx - width * 0.38, height / 2, frontZ);
+        box(house, 0.13, height - 0.25, 0.14, timber, hx + width * 0.38, height / 2, frontZ);
+        box(house, 0.12, height - 0.3, 0.14, timber, hx, height / 2, frontZ);
+        // Donkere ramen met houten kozijnen.
+        for (const dx of [-0.85, 0.85]) {
+          box(house, 0.52, 0.72, 0.1, darkStone, hx + dx, height * 0.68, frontZ + 0.08, false);
+          box(house, 0.08, 0.82, 0.12, timberLight, hx + dx, height * 0.68, frontZ + 0.14);
+          box(house, 0.62, 0.08, 0.12, timberLight, hx + dx, height * 0.68, frontZ + 0.14);
+          box(house, 0.62, 0.08, 0.12, timberLight, hx + dx, height * 0.68 - 0.36, frontZ + 0.14);
+        }
+        // Dak met twee schuine vlakken.
+        const roofL = box(house, width * 0.62, 0.18, 4.0, roofMat, hx - width * 0.22, height + 0.48, zz - 0.02);
+        roofL.rotation.z = 0.42;
+        const roofR = box(house, width * 0.62, 0.18, 4.0, roofLight, hx + width * 0.22, height + 0.48, zz - 0.02);
+        roofR.rotation.z = -0.42;
+        // Deur op straatniveau.
+        box(house, 0.68, 1.55, 0.12, woodDoor, hx - side * 0.75, 0.8, frontZ + 0.1);
+        box(house, 0.12, 1.62, 0.14, timberLight, hx - side * 1.12, 0.8, frontZ + 0.13);
+        gate.add(house);
+      }
+      addCityHouse(-1, -7.0, 0);
+      addCityHouse(1, -9.0, 1);
+      addCityHouse(-1, -17.0, 1);
+      addCityHouse(1, -19.0, 0);
+      // Een kleine marktkraam in de verte maakt duidelijk dat dit een bewoonde stad is.
+      box(gate, 2.0, 0.16, 1.2, timber, -4.25, 1.0, -13.0);
+      for (const x of [-5.05, -3.45]) box(gate, 0.12, 1.4, 0.12, timber, x, 0.72, -13.0);
+      box(gate, 2.2, 0.12, 1.45, roofLight, -4.25, 1.78, -13.0);
+
+      // Stadsembleem boven de boog.
+      const banner = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.95), new THREE.MeshStandardMaterial({ color: 0x7c2727, side: THREE.DoubleSide }));
+      banner.position.set(0, 4.02, 1.18);
+      gate.add(banner);
+      box(gate, 0.12, 0.62, 0.08, gold, 0, 4.02, 1.25);
+      box(gate, 0.42, 0.1, 0.08, gold, 0, 4.02, 1.25);
+
+      // Fakkels aan de voorkant en aan de binnenkant van de doorgang.
+      for (const side of [-1, 1]) {
+        const bracket = box(gate, 0.13, 0.48, 0.13, timber, side * 3.0, 2.9, 1.22);
+        const flame = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), torchMat);
+        flame.position.set(side * 3.0, 3.28, 1.22);
+        gate.add(flame);
+        const light = new THREE.PointLight(0xff7626, 0.85, 6);
+        light.position.copy(flame.position);
+        gate.add(light);
+        flames.push(flame);
+      }
+
+      gate.position.z = z;
+      gate.userData.isGate = true;
+      gate.userData.flames = flames;
+      scene.add(gate);
+      decorations.push(gate);
+    }
+
+    // Lange rijen inwoners langs de weg, met brandende fakkels.
+    function spawnCrowdRows(z) {
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 7; i++) {
+          const x = side * (5.0 + Math.random() * 1.2);
+          const person = createVillager(x, z + i * 1.25, true);
+          person.userData.phase += i * 0.7;
+        }
+      }
+    }
+
+    function spawnDecoration(z) {
+      // Middeleeuws dorp – huizen dichterbij aan beide kanten
+      const sides = [-1, 1];
+      for (const side of sides) {
+        if (Math.random() > 0.35) {
+          const x = side * (5.2 + Math.random() * 3.5);
+          const type = Math.random();
+
+          if (type < 0.4) {
+            // Huis
+            const house = new THREE.Group();
+            const wallColor = [0xb89b7a, 0xc4a882, 0xa88b6a, 0xd4b896][Math.floor(Math.random() * 4)];
+            const houseWidth = 2.4 + Math.random() * 1.2;
+            const houseHeight = 1.8 + Math.random() * 0.8;
+            const base = new THREE.Mesh(
+              new THREE.BoxGeometry(houseWidth, houseHeight, 2.6),
+              surfaceMaterial('plaster', 1.1, 1.2, { roughness: 1 })
+            );
+            base.position.y = houseHeight / 2 + 0.1;
+            base.castShadow = true;
+            base.receiveShadow = true;
+            house.add(base);
+
+            // Echt zadeldak met verweerde dakpannen in plaats van een piramidedak.
+            const roofMat = surfaceMaterial('roof', 1.5, 1.5, { roughness: 0.98 });
+            const roofLeft = new THREE.Mesh(new THREE.BoxGeometry(houseWidth * 0.7, 0.16, 3.0), roofMat);
+            roofLeft.position.set(-houseWidth * 0.19, houseHeight + 0.55, 0);
+            roofLeft.rotation.z = 0.48; roofLeft.castShadow = true; house.add(roofLeft);
+            const roofRight = new THREE.Mesh(new THREE.BoxGeometry(houseWidth * 0.7, 0.16, 3.0), roofMat);
+            roofRight.position.set(houseWidth * 0.19, houseHeight + 0.55, 0);
+            roofRight.rotation.z = -0.48; roofRight.castShadow = true; house.add(roofRight);
+            const ridge = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.1, 8), surfaceMaterial('wood', 1, 2, { roughness: 1 }));
+            ridge.rotation.x = Math.PI / 2; ridge.position.y = houseHeight + 1.08; house.add(ridge);
+
+            // Houten vakwerk, raamkozijnen en luiken op de voorgevel.
+            const timberMat = surfaceMaterial('wood', 0.8, 1.8, { roughness: 0.95 });
+            for (const px of [-houseWidth * 0.38, 0, houseWidth * 0.38]) {
+              const beam = new THREE.Mesh(new THREE.BoxGeometry(0.12, houseHeight, 0.12), timberMat);
+              beam.position.set(px, base.position.y, 1.34); house.add(beam);
+            }
+            const crossBeam = new THREE.Mesh(new THREE.BoxGeometry(houseWidth + 0.08, 0.12, 0.12), timberMat);
+            crossBeam.position.set(0, houseHeight * 0.65, 1.34); house.add(crossBeam);
+            const windowMat = new THREE.MeshStandardMaterial({ color: 0x28303a, roughness: 0.6 });
+            const window = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.58, 0.08), windowMat);
+            window.position.set(houseWidth * 0.2, houseHeight * 0.72, 1.36); house.add(window);
+            for (const px of [houseWidth * 0.2 - 0.3, houseWidth * 0.2 + 0.3]) {
+              const shutter = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.62, 0.1), timberMat);
+              shutter.position.set(px, houseHeight * 0.72, 1.4); house.add(shutter);
+            }
+
+            // Deur
+            const door = new THREE.Mesh(
+              new THREE.BoxGeometry(0.5, 1.0, 0.1),
+              surfaceMaterial('wood', 0.7, 1.3, { roughness: 1 })
+            );
+            door.position.set(0, 0.55, 1.35);
+            house.add(door);
+
+            house.position.set(x, 0, z + (Math.random() - 0.5) * 4);
+            scene.add(house);
+            decorations.push(house);
+
+          } else if (type < 0.6) {
+            // Marktstal / kraam
+            const stall = new THREE.Group();
+            const base = new THREE.Mesh(
+              new THREE.BoxGeometry(1.8, 0.15, 1.2),
+              surfaceMaterial('wood', 1, 1, { roughness: 1 })
+            );
+            base.position.y = 0.8;
+            stall.add(base);
+            // Dakje
+            const roof = new THREE.Mesh(
+              new THREE.BoxGeometry(2.0, 0.08, 1.4),
+              surfaceMaterial('roof', 1, 1, { roughness: 1 })
+            );
+            roof.position.y = 1.6;
+            roof.rotation.x = -0.15;
+            stall.add(roof);
+            // Palen
+            [-0.7, 0.7].forEach(px => {
+              const post = new THREE.Mesh(
+                new THREE.BoxGeometry(0.1, 1.4, 0.1),
+                new THREE.MeshStandardMaterial({ color: 0x4a3020 })
+              );
+              post.position.set(px, 0.7, 0);
+              stall.add(post);
+            });
+            stall.position.set(x, 0, z);
+            scene.add(stall);
+            decorations.push(stall);
+
+          } else if (type < 0.82) {
+            // Meerdere burgers
+            const count = 1 + Math.floor(Math.random() * 3); // 1 tot 3 per kant
+            for (let v = 0; v < count; v++) {
+              const offsetZ = (Math.random() - 0.5) * 5;
+              const offsetX = (Math.random() - 0.5) * 1.5;
+              createVillager(x * 0.85 + offsetX, z + offsetZ);
+            }
+
+          } else {
+            // Boom
+            const tree = new THREE.Group();
+            const trunk = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.22, 0.3, 1.6, 6),
+              new THREE.MeshStandardMaterial({ color: 0x4a3020 })
+            );
+            trunk.position.y = 0.8;
+            tree.add(trunk);
+            const foliage = new THREE.Mesh(
+              new THREE.SphereGeometry(1.1, 8, 6),
+              new THREE.MeshStandardMaterial({ color: 0x4a7a3a, roughness: 1 })
+            );
+            foliage.position.y = 2.1;
+            tree.add(foliage);
+            tree.position.set(x * 0.9, 0, z);
+            scene.add(tree);
+            decorations.push(tree);
+          }
+        }
+      }
+    }
+
+    // ---------- Spawning ----------
+    // Objects spawn far in front (negative Z) and move toward the player (+Z direction)
+    function spawnAhead() {
+      // Place next group further ahead (more negative)
+      const z = lastSpawnZ - spawnInterval - Math.random() * 4;
+      lastSpawnZ = z;
+
+      // Decide pattern – dense with lots of coins
+      const r = Math.random();
+
+      if (r < 0.28) {
+        // Single obstacle + coins around it
+        const lane = Math.floor(Math.random() * 3);
+        const types = ['cart', 'barrel', 'fence', 'knight'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        createObstacle(type, lane, z);
+
+        // Always add some coins
+        const coinLane = (lane + 1 + Math.floor(Math.random() * 2)) % 3;
+        createCoin(coinLane, z + 2.5);
+        if (Math.random() > 0.35) createCoin(coinLane, z + 5);
+        if (Math.random() > 0.55) createCoin((coinLane + 1) % 3, z + 3.5);
+
+      } else if (r < 0.48) {
+        // Two obstacles, leave one lane free + coins in free lane
+        const freeLane = Math.floor(Math.random() * 3);
+        for (let l = 0; l < 3; l++) {
+          if (l !== freeLane) {
+            const type = Math.random() > 0.45 ? 'cart' : (Math.random() > 0.5 ? 'barrel' : 'fence');
+            createObstacle(type, l, z);
+          }
+        }
+        // Coins in the free lane
+        createCoin(freeLane, z + 2);
+        createCoin(freeLane, z + 4.5);
+        if (Math.random() > 0.45) createCoin(freeLane, z + 7);
+
+      } else if (r < 0.62) {
+        // High gate (must slide) + coins before/after
+        const lane = Math.floor(Math.random() * 3);
+        createObstacle('gate', lane, z);
+        createCoin(lane, z + 4);
+        createCoin((lane + 1) % 3, z - 3);
+        if (Math.random() > 0.5) createCoin((lane + 2) % 3, z + 2);
+
+      } else if (r < 0.82) {
+        // Long coin lines / zigzag
+        const baseLane = Math.floor(Math.random() * 3);
+        for (let i = 0; i < 6; i++) {
+          const lane = (baseLane + Math.floor(i / 2)) % 3;
+          createCoin(lane, z + i * 2.2);
+        }
+        // Small chance of an obstacle at the end
+        if (Math.random() > 0.5) {
+          createObstacle(Math.random() > 0.5 ? 'barrel' : 'fence', (baseLane + 1) % 3, z + 14);
+        }
+
+      } else {
+        // Dense mixed section
+        createObstacle('fence', Math.floor(Math.random() * 3), z);
+        createObstacle(Math.random() > 0.5 ? 'cart' : 'barrel', Math.floor(Math.random() * 3), z - 6);
+        // Lots of coins
+        for (let i = 0; i < 5; i++) {
+          createCoin(Math.floor(Math.random() * 3), z + 2 - i * 2.5);
+        }
+      }
+
+      // Extra random coins sometimes
+      if (Math.random() > 0.4) {
+        createCoin(Math.floor(Math.random() * 3), z - 8 - Math.random() * 6);
+      }
+      if (Math.random() > 0.65) {
+        createCoin(Math.floor(Math.random() * 3), z - 12);
+        createCoin(Math.floor(Math.random() * 3), z - 14.5);
+      }
+
+      // Dorpsdecoratie – vaker
+      if (Math.random() > 0.2) {
+        spawnDecoration(z - Math.random() * 6);
+      }
+
+      // Stadspoorten verschijnen niet willekeurig, maar precies bij scoremijlpalen.
+      // De gewone dorpsbewoners kunnen tussendoor wel blijven verschijnen.
+      if (Math.random() > 0.25) {
+        spawnCrowdRows(z - 4);
+      }
+
+      // Extra groep burgers soms
+      if (Math.random() > 0.35) {
+        const side = Math.random() > 0.5 ? 1 : -1;
+        const count = 2 + Math.floor(Math.random() * 3);
+        for (let v = 0; v < count; v++) {
+          createVillager(side * (4.8 + Math.random() * 2.5), z + (Math.random() - 0.5) * 8);
+        }
+      }
+
+      // Increase difficulty a bit faster
+      spawnInterval = Math.max(9.5, 15.5 - distance * 0.01);
+    }
+
+    // ---------- Controls ----------
+    function setupControls() {
+      const keys = {};
+      window.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (!isPlaying || isGameOver) return;
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') changeLane(-1);
+        if (e.code === 'ArrowRight' || e.code === 'KeyD') changeLane(1);
+        if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') jump();
+        if (e.code === 'ArrowDown' || e.code === 'KeyS') slide();
+        e.preventDefault();
+      });
+      window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+      // Touch
+      let touchStartX = 0, touchStartY = 0;
+      canvas.addEventListener('touchstart', e => {
+        if (e.touches.length) {
+          touchStartX = e.touches[0].clientX;
+          touchStartY = e.touches[0].clientY;
+        }
+      }, { passive: true });
+      canvas.addEventListener('touchend', e => {
+        if (!isPlaying || isGameOver || !e.changedTouches.length) return;
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = e.changedTouches[0].clientY - touchStartY;
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) {
+          changeLane(dx > 0 ? 1 : -1);
+        } else if (Math.abs(dy) > 30) {
+          if (dy < 0) jump();
+          else slide();
+        }
+      }, { passive: true });
+    }
+
+    function changeLane(dir) {
+      const newLane = THREE.MathUtils.clamp(currentLane + dir, 0, 2);
+      if (newLane !== currentLane) {
+        currentLane = newLane;
+        targetX = LANES[currentLane];
+      }
+    }
+
+    function jump() {
+      if (!isJumping && !isSliding) {
+        isJumping = true;
+        velocityY = JUMP_FORCE;
+      }
+    }
+
+    function slide() {
+      if (!isJumping && !isSliding) {
+        isSliding = true;
+        slideTimer = SLIDE_DURATION;
+        // Visual: scale down
+        player.scale.y = 0.45;
+        player.position.y = 0; // already at ground
+      }
+    }
+
+    // ---------- Game loop helpers ----------
+    function updatePlayer(dt) {
+      const ud = player.userData;
+
+      // Lane lerp
+      player.position.x = THREE.MathUtils.damp(player.position.x, targetX, LANE_SWITCH_SPEED, dt);
+
+      // Jump physics
+      if (isJumping) {
+        velocityY -= GRAVITY * dt;
+        player.position.y += velocityY * dt;
+        if (player.position.y <= 0) {
+          player.position.y = 0;
+          isJumping = false;
+          velocityY = 0;
+        }
+      }
+
+      // Slide timer
+      if (isSliding) {
+        slideTimer -= dt;
+        if (slideTimer <= 0) {
+          isSliding = false;
+        }
+      }
+
+      // ===== ANIMATIONS =====
+      const runSpeed = 10 + speedMult * 4;
+
+      if (isSliding) {
+        // === SLIDE ANIMATION ===
+        // Flatten and lean forward
+        player.scale.set(1.15, 0.4, 1.2);
+        player.rotation.x = 0.55; // lean forward
+
+        // Legs tucked
+        ud.leftLeg.rotation.x = 1.4;
+        ud.rightLeg.rotation.x = 1.4;
+        ud.leftLeg.position.y = 0.55;
+        ud.rightLeg.position.y = 0.55;
+
+        // Torso and head lower
+        ud.torso.position.y = 0.7;
+        ud.helmet.position.y = 1.15;
+        ud.plume.position.y = 1.45;
+        ud.cape.position.y = 0.75;
+        ud.cape.rotation.x = 0.4;
+
+        // Arms / gear
+        ud.leftShoulder.position.y = 0.95;
+        ud.rightShoulder.position.y = 0.95;
+        ud.sword.rotation.z = 0.6;
+        ud.shield.position.y = 0.7;
+
+      } else if (isJumping) {
+        // === JUMP ANIMATION ===
+        player.scale.set(1, 1, 1);
+        player.rotation.x = 0;
+
+        // Legs tucked up
+        const jumpProgress = Math.min(1, player.position.y / 2.2);
+        ud.leftLeg.rotation.x = -0.9 - jumpProgress * 0.5;
+        ud.rightLeg.rotation.x = -0.9 - jumpProgress * 0.5;
+        ud.leftLeg.position.y = 0.75;
+        ud.rightLeg.position.y = 0.75;
+
+        // Slight lean back at start, then neutral
+        ud.torso.rotation.x = -0.15 + jumpProgress * 0.1;
+        ud.torso.position.y = 1.1;
+        ud.helmet.position.y = 1.72;
+        ud.plume.position.y = 2.05;
+        ud.plume.rotation.x = -0.3;
+
+        // Cape flies up
+        ud.cape.position.y = 1.15;
+        ud.cape.rotation.x = -0.5 - jumpProgress * 0.3;
+
+        ud.leftShoulder.position.y = 1.4;
+        ud.rightShoulder.position.y = 1.4;
+        ud.sword.rotation.z = 0;
+        ud.shield.position.y = 1.05;
+
+      } else {
+        // === RUNNING ANIMATION ===
+        player.scale.set(1, 1, 1);
+        player.rotation.x = 0;
+
+        ud.runPhase += dt * runSpeed;
+        const swing = Math.sin(ud.runPhase) * 0.7;
+        const swing2 = Math.sin(ud.runPhase + Math.PI) * 0.7;
+
+        // Legs cycle
+        ud.leftLeg.rotation.x = swing;
+        ud.rightLeg.rotation.x = swing2;
+        ud.leftLeg.position.y = 0.75;
+        ud.rightLeg.position.y = 0.75;
+
+        // Body bob
+        const bob = Math.abs(Math.sin(ud.runPhase * 2)) * 0.07;
+        player.position.y = bob;
+
+        // Torso slight counter-rotation
+        ud.torso.rotation.x = Math.sin(ud.runPhase * 2) * 0.04;
+        ud.torso.position.y = 1.1;
+        ud.helmet.position.y = 1.72 + bob * 0.3;
+        ud.plume.position.y = 2.05;
+        ud.plume.rotation.x = Math.sin(ud.runPhase * 2) * 0.15;
+
+        // Cape sway
+        ud.cape.position.y = 1.15;
+        ud.cape.rotation.x = Math.sin(ud.runPhase * 1.5) * 0.12 - 0.1;
+
+        // Shoulders
+        ud.leftShoulder.position.y = 1.4;
+        ud.rightShoulder.position.y = 1.4;
+        ud.leftShoulder.rotation.z = Math.sin(ud.runPhase) * 0.1;
+        ud.rightShoulder.rotation.z = Math.sin(ud.runPhase + Math.PI) * 0.1;
+
+        // Sword + shield slight movement
+        ud.sword.rotation.z = Math.sin(ud.runPhase) * 0.08;
+        ud.shield.position.y = 1.05 + Math.sin(ud.runPhase) * 0.03;
+      }
+
+      // Lean when changing lanes
+      const leanTarget = (targetX - player.position.x) * 0.25;
+      player.rotation.z = THREE.MathUtils.damp(player.rotation.z, leanTarget, 8, dt);
+    }
+
+    // Eenmalige komische WC-scène bij precies 16.700 punten.
+    function createWcStall() {
+      const stall = new THREE.Group();
+      const wood = new THREE.MeshStandardMaterial({ color: 0x704326, roughness: 0.92 });
+      const darkWood = new THREE.MeshStandardMaterial({ color: 0x3e2618, roughness: 1 });
+      const roofMat = new THREE.MeshStandardMaterial({ color: 0x49352a, roughness: 1 });
+      const signMat = new THREE.MeshStandardMaterial({ color: 0xe5d2a7, roughness: 1 });
+      const addBox = (w,h,d,mat,x,y,z) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+        m.position.set(x,y,z); m.castShadow = true; m.receiveShadow = true; stall.add(m); return m;
+      };
+      stall.position.set(0, 0, -5.5);
+      addBox(2.25, 0.14, 2.0, darkWood, 0, 0.07, 0);
+      addBox(0.16, 2.25, 2.0, wood, -1.05, 1.2, 0);
+      addBox(0.16, 2.25, 2.0, wood, 1.05, 1.2, 0);
+      addBox(2.25, 2.25, 0.16, wood, 0, 1.2, -0.92);
+      addBox(2.5, 0.18, 2.25, roofMat, 0, 2.42, 0);
+      // Vertical planks and cross braces make the little privy read clearly as a wooden booth.
+      for (let x=-0.82; x<=0.83; x+=0.28) {
+        addBox(0.045, 2.0, 0.055, darkWood, x, 1.18, 0.94);
+      }
+      addBox(2.05, 0.12, 0.08, darkWood, 0, 2.12, 0.96);
+      // Door swings shut across the entrance.
+      const hinge = new THREE.Group();
+      hinge.position.set(-1.0, 0.1, 0.98);
+      stall.add(hinge);
+      const door = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.0, 0.12), wood);
+      door.position.set(0.5, 1.0, 0); door.castShadow = true; hinge.add(door);
+      for (let y=0.25; y<1.9; y+=0.34) {
+        const plankLine = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.035,0.14), darkWood);
+        plankLine.position.set(0.5,y,0); hinge.add(plankLine);
+      }
+      const latch = new THREE.Mesh(new THREE.BoxGeometry(0.12,0.18,0.08), signMat);
+      latch.position.set(0.85,1.05,0.09); hinge.add(latch);
+      // Sign above the entrance.
+      addBox(1.12, 0.38, 0.1, darkWood, 0, 2.12, 1.05);
+      const sign = new THREE.Mesh(new THREE.BoxGeometry(0.94,0.25,0.025), signMat);
+      sign.position.set(0,2.12,1.12); stall.add(sign);
+      // Simple toilet visible inside the booth.
+      const porcelain = new THREE.MeshStandardMaterial({ color: 0xe8e6dc, roughness: 0.35 });
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.28,0.42,16), porcelain);
+      bowl.position.set(0,0.3,-0.45); bowl.castShadow=true; stall.add(bowl);
+      const seat = new THREE.Mesh(new THREE.TorusGeometry(0.27,0.055,8,20), darkWood);
+      seat.rotation.x=Math.PI/2; seat.position.set(0,0.54,-0.45); stall.add(seat);
+      scene.add(stall);
+      return { stall, hinge };
+    }
+
+    function playComedicFart() {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        wcAudioContext = wcAudioContext || new AudioCtx();
+        if (wcAudioContext.state === 'suspended') wcAudioContext.resume();
+        const ctx = wcAudioContext;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+        osc.type = 'sawtooth';
+        filter.type = 'lowpass'; filter.frequency.setValueAtTime(190, now);
+        osc.frequency.setValueAtTime(105, now);
+        osc.frequency.exponentialRampToValueAtTime(48, now + 0.42);
+        osc.frequency.exponentialRampToValueAtTime(82, now + 0.78);
+        osc.frequency.exponentialRampToValueAtTime(38, now + 1.15);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.22, now + 0.06);
+        gain.gain.setValueAtTime(0.18, now + 0.72);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+        osc.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+        osc.start(now); osc.stop(now + 1.22);
+      } catch (e) { /* Audio blijft optioneel als de browser het blokkeert. */ }
+    }
+
+    function beginWcCutscene() {
+      if (wcShown) return;
+      wcShown = true;
+      isPlaying = false;
+      const built = createWcStall();
+      wcCutscene = { ...built, time: 0, startZ: player.position.z, startX: player.position.x, soundPlayed: false };
+      // Begin de scène vanuit een schone, stabiele lichaamshouding.
+      // Zo neemt de wc-animatie geen slide- of spring-schaal mee.
+      player.visible = true;
+      player.scale.set(1, 1, 1);
+      player.rotation.set(0, 0, 0);
+      player.position.y = 0;
+      const ud = player.userData;
+      if (ud) {
+        ud.leftLeg.rotation.set(0, 0, 0);
+        ud.rightLeg.rotation.set(0, 0, 0);
+        ud.torso.rotation.set(0, 0, 0);
+        ud.cape.rotation.set(0, 0, 0);
+        ud.leftShoulder.rotation.set(0, 0, 0);
+        ud.rightShoulder.rotation.set(0, 0, 0);
+      }
+    }
+
+    function updateWcCutscene(dt) {
+      if (!wcCutscene) return;
+      const c = wcCutscene;
+      c.time += dt;
+      const enter = Math.min(1, c.time / 1.55);
+      player.position.x = THREE.MathUtils.damp(player.position.x, 0, 5, dt);
+      player.position.z = THREE.MathUtils.lerp(c.startZ, -4.55, enter);
+      player.rotation.y = THREE.MathUtils.damp(player.rotation.y, Math.PI, 5, dt);
+      if (c.time > 1.45) player.visible = false;
+      if (c.time < 1.25) c.hinge.rotation.y = -0.95;
+      else c.hinge.rotation.y = THREE.MathUtils.damp(c.hinge.rotation.y, 0, 5, dt);
+      if (c.time > 2.05 && !c.soundPlayed) {
+        c.soundPlayed = true;
+        playComedicFart();
+        const caption = document.getElementById('wc-caption');
+        if (caption) caption.style.opacity = '1';
+      }
+      if (c.time > 4.8) {
+        // Na de grap gaat de run verder vanaf dezelfde score.
+        scene.remove(c.stall);
+        wcCutscene = null;
+        player.visible = true;
+        player.position.set(0,0,0);
+        player.rotation.set(0,0,0);
+        isPlaying = true;
+      }
+    }
+
+    function updateWorld(dt) {
+      const move = BASE_SPEED * speedMult * dt;
+      distance += move;
+      score = Math.floor(distance * 2) + coinCount * 15;
+      speedMult = Math.min(MAX_SPEED_MULT, 1 + distance * 0.0012);
+      if (score >= 16700 && !wcShown) {
+        beginWcCutscene();
+        return;
+      }
+
+      // Plan een stadspoort zodra de speler een nieuwe 1.000-puntenmijlpaal bereikt.
+      // De poort verschijnt ruim voor de speler, zodat hij er naartoe kan rennen.
+      while (score >= nextCityGateScore) {
+        const gateZ = player.position.z - SPAWN_DIST - 10;
+        spawnCityGate(gateZ);
+        spawnCrowdRows(gateZ - 8);
+        nextCityGateScore += 1000;
+      }
+
+      // Move ground
+      groundPieces.forEach(g => {
+        g.position.z += move;
+        if (g.position.z > 25) {
+          g.position.z -= 160; // recycle (8 pieces * 20)
+        }
+      });
+
+      // Obstacles
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const o = obstacles[i];
+        o.position.z += move;
+        if (o.position.z > DESPAWN_Z + 5) {
+          scene.remove(o);
+          obstacles.splice(i, 1);
+          continue;
+        }
+        // Collision
+        if (Math.abs(o.position.z - player.position.z) < 1.2) {
+          const sameLane = Math.abs(o.position.x - player.position.x) < 1.1;
+          if (sameLane) {
+            if (o.userData.isHigh) {
+              // Gate: only collide if not sliding
+              if (!isSliding && player.position.y < 1.4) {
+                gameOver();
+              }
+            } else {
+              // Normal obstacle: collide if not jumping high enough
+              if (player.position.y < o.userData.height * 0.85) {
+                gameOver();
+              }
+            }
+          }
+        }
+      }
+
+      // Coins
+      for (let i = coins.length - 1; i >= 0; i--) {
+        const c = coins[i];
+        c.position.z += move;
+        c.rotation.z += dt * 4;
+        if (c.position.z > DESPAWN_Z + 5) {
+          scene.remove(c);
+          coins.splice(i, 1);
+          continue;
+        }
+        if (!c.userData.collected &&
+            Math.abs(c.position.z - player.position.z) < 1.0 &&
+            Math.abs(c.position.x - player.position.x) < 0.9 &&
+            Math.abs(c.position.y - (player.position.y + 0.8)) < 1.2) {
+          c.userData.collected = true;
+          coinCount++;
+          scene.remove(c);
+          coins.splice(i, 1);
+        }
+      }
+
+      // Decorations
+      for (let i = decorations.length - 1; i >= 0; i--) {
+        const d = decorations[i];
+        d.position.z += move;
+
+        // Lichte zwaai voor burgers
+        if (d.userData && d.userData.isGate && d.userData.flames) {
+          const flickerTime = clock.elapsedTime * 8 + Math.abs(d.position.z) * 0.03;
+          d.userData.flames.forEach((flame, flameIndex) => {
+            const flicker = 1 + Math.sin(flickerTime + flameIndex * 1.7) * 0.18;
+            flame.scale.set(0.85, flicker, 0.85);
+          });
+        }
+
+        if (d.userData && d.userData.isVillager) {
+          d.userData.phase += dt * 2.5;
+          // Blijf naar het poppetje kijken, ook wanneer het van baan wisselt.
+          d.lookAt(player.position.x, d.position.y, player.position.z);
+          const swing = Math.sin(d.userData.phase * 2.2) * 0.12;
+          const bob = Math.abs(Math.sin(d.userData.phase * 2.2)) * 0.025;
+          if (d.userData.torso) d.userData.torso.position.y = 1.12 + bob;
+          if (d.userData.head) {
+            d.userData.head.position.y = 1.91 + bob * 0.7;
+            d.userData.head.rotation.x = Math.sin(d.userData.phase * 1.1) * 0.025;
+          }
+          if (d.userData.leftArm) d.userData.leftArm.rotation.z = 0.14 + swing;
+          if (d.userData.rightArm) d.userData.rightArm.rotation.z = -0.18 - swing;
+          if (d.userData.leftForearm) d.userData.leftForearm.rotation.z = 0.08 + Math.max(0, swing) * 0.35;
+          if (d.userData.rightForearm) d.userData.rightForearm.rotation.z = 0.2 + Math.max(0, -swing) * 0.3;
+          if (d.userData.leftLeg) d.userData.leftLeg.rotation.x = swing * 0.35;
+          if (d.userData.rightLeg) d.userData.rightLeg.rotation.x = -swing * 0.35;
+          if (d.userData.leftShin) d.userData.leftShin.rotation.x = Math.max(0, -swing) * 0.25;
+          if (d.userData.rightShin) d.userData.rightShin.rotation.x = Math.max(0, swing) * 0.25;
+          if (d.userData.flame) {
+            const flicker = 1 + Math.sin(d.userData.phase * 8) * 0.18;
+            d.userData.flame.scale.set(0.78, 1.45 * flicker, 0.78);
+          }
+        }
+
+        if (d.position.z > 30) {
+          scene.remove(d);
+          decorations.splice(i, 1);
+        }
+      }
+
+      // Keep spawning new groups ahead of the player
+      // lastSpawnZ becomes more negative; we spawn when it is not far enough ahead
+      while (lastSpawnZ > -distance - SPAWN_DIST) {
+        spawnAhead();
+      }
+    }
+
+    function updateCamera(dt) {
+      // Slight follow + look ahead
+      camera.position.x = THREE.MathUtils.damp(camera.position.x, player.position.x * 0.4, 4, dt);
+      camera.position.y = THREE.MathUtils.damp(camera.position.y, 5.2 + player.position.y * 0.3, 5, dt);
+      camera.lookAt(player.position.x * 0.3, 1.2 + player.position.y * 0.2, player.position.z - 12);
+    }
+
+    function updateUI() {
+      scoreEl.textContent = score;
+      coinsEl.textContent = coinCount;
+      speedEl.textContent = speedMult.toFixed(1);
+    }
+
+    // ---------- Game flow ----------
+    function startGame() {
+      // Reset
+      obstacles.forEach(o => scene.remove(o));
+      coins.forEach(c => scene.remove(c));
+      decorations.forEach(d => scene.remove(d));
+      if (wcCutscene) scene.remove(wcCutscene.stall);
+      wcCutscene = null;
+      wcShown = false;
+      player.visible = true;
+      const wcCaption = document.getElementById('wc-caption');
+      if (wcCaption) wcCaption.style.opacity = '0';
+      obstacles = [];
+      coins = [];
+      decorations = [];
+
+      currentLane = 1;
+      targetX = 0;
+      player.position.set(0, 0, 0);
+      player.scale.set(1, 1, 1);
+      player.rotation.set(0, 0, 0);
+      velocityY = 0;
+      isJumping = false;
+      isSliding = false;
+
+      // Reset body parts
+      if (player.userData) {
+        const ud = player.userData;
+        ud.leftLeg.rotation.set(0, 0, 0);
+        ud.rightLeg.rotation.set(0, 0, 0);
+        ud.torso.rotation.set(0, 0, 0);
+        ud.cape.rotation.set(0, 0, 0);
+        ud.plume.rotation.set(0, 0, 0);
+        ud.sword.rotation.set(0, 0, 0);
+        ud.runPhase = 0;
+      }
+      score = 0;
+      coinCount = 0;
+      distance = 0;
+      nextCityGateScore = 1000;
+      speedMult = 1;
+      lastSpawnZ = -25;   // start spawning in front of the player
+      spawnInterval = 14;
+      isGameOver = false;
+      isPlaying = true;
+
+      // Initial spawns so there is already content visible
+      for (let i = 0; i < 7; i++) spawnAhead();
+
+      overlay.style.display = 'none';
+      overlayGO.style.display = 'none';
+      clock.start();
+    }
+
+    function gameOver() {
+      if (isGameOver) return;
+      isGameOver = true;
+      isPlaying = false;
+      finalScoreEl.textContent = `Score: ${score}  •  Goud: ${coinCount}`;
+      overlayGO.style.display = 'flex';
+    }
+
+    // ---------- Animate ----------
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 1 / 30);
+
+      if (wcCutscene && !isGameOver) {
+        updateWcCutscene(dt);
+        updateCamera(dt);
+        updateUI();
+      } else if (isPlaying && !isGameOver) {
+        updatePlayer(dt);
+        updateWorld(dt);
+        updateCamera(dt);
+        updateUI();
+      } else {
+        // Idle camera sway
+        camera.position.x = Math.sin(Date.now() * 0.0005) * 0.8;
+        camera.lookAt(0, 1.5, -10);
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Buttons
+    startBtn.addEventListener('click', startGame);
+    restartBtn.addEventListener('click', startGame);
+
+    // Start
+    init();
+  </script>
+</body>
+</html>
